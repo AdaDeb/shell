@@ -18,10 +18,14 @@
 
 
 #include <stdio.h>
+#include <sys/stat.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "parse.h"
+
 
 /*
  * Function declarations
@@ -30,6 +34,8 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void simple_command(Command *);
+char * search_path(char *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -66,7 +72,8 @@ int main(void)
         add_history(line);
         /* execute it */
         n = parse(line, &cmd);
-        PrintCommand(n, &cmd);
+        //PrintCommand(n, &cmd); // uncomment to print parser info
+	simple_command(&cmd);
       }
     }
     
@@ -111,6 +118,9 @@ PrintPgm (Pgm *p)
     /* The list is in reversed order so print
      * it reversed to get right
      */
+
+    if (p->next == NULL) printf("ONLY ONE COMMAND");
+
     PrintPgm(p->next);
     printf("    [");
     while (*pl) {
@@ -145,3 +155,59 @@ stripwhite (char *string)
 
   string [++i] = '\0';
 }
+
+
+/*
+  Runs a simple command
+ */
+void simple_command(Command *cmd){
+  Pgm *p = cmd->pgm;
+  char **pl = p->pgmlist;
+  
+  int pid = fork();
+  int status;
+
+  if (pid == 0) {// child process
+    printf("CHILD");
+    char *prg = search_path(*pl); // free this?
+    execl(prg, *pl,NULL);
+  }
+  else if (pid > 0){ 
+    wait(&status);
+  } else 
+    printf("Failed to fork!!");
+
+}
+
+
+char * search_path(char *executable){
+  char *envvar = getenv("PATH");
+  size_t length  = strlen (envvar) + 1;
+  char * pathvar = malloc (length); // allocate memory for array
+  strcpy (pathvar, envvar); 
+  char *path_tokens =  strtok(pathvar, ":");
+  
+  while(path_tokens != NULL) {
+
+    struct stat info;
+
+    char *fullpath = malloc(strlen(path_tokens)+
+			    strlen(executable)+1); // allocate mem for concatenated string
+    
+    strcpy(fullpath, path_tokens);
+    strcat(fullpath, "/");
+    strcat(fullpath, executable);
+
+    if (stat(fullpath, &info) == 0){ // fails if file doesn't exist 
+      return fullpath;
+    }
+    path_tokens = strtok(NULL, ":");
+  }
+  
+  free(pathvar);
+
+  return NULL;
+
+}
+
+

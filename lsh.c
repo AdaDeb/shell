@@ -35,10 +35,12 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-void simple_command(Command *);
+void run_command(Command *);
 char * search_path(char *);
 void change_dir(char **);
 void signal_handler(int);
+int is_background(char **);
+
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -76,7 +78,7 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
         //PrintCommand(n, &cmd); // uncomment to print parser info
-	simple_command(&cmd);
+	run_command(&cmd);
       }
     }
     
@@ -122,8 +124,6 @@ PrintPgm (Pgm *p)
      * it reversed to get right
      */
 
-    if (p->next == NULL) printf("ONLY ONE COMMAND");
-
     PrintPgm(p->next);
     printf("    [");
     while (*pl) {
@@ -163,11 +163,14 @@ stripwhite (char *string)
 /*
   Runs a simple command
   Maybe should return child exit stat
+  Should have comments inside this method!!
  */
-void simple_command(Command *cmd){
+void run_command(Command *cmd){
   Pgm *p = cmd->pgm;
   char **pl = p->pgmlist;
   
+
+
   if (strcmp(*pl,"exit") == 0) {  // change to switch?
     exit(0);
   } else if (strcmp(*pl,"cd") == 0) {
@@ -185,13 +188,20 @@ void simple_command(Command *cmd){
     }
     else if (pid > 0){ 
       signal(SIGINT, signal_handler);
-      wait(&status);
+      if (cmd -> bakground == 1) 
+	signal(SIGCHLD, signal_handler);
+      else 
+	wait(&status);
     } else 
       printf("Failed to fork!!");
   }
 }
 
 
+/*
+ * Search for the path of an executable in the
+ * PATH variable and returns it
+ */
 char * search_path(char *executable){
   char *envvar = getenv("PATH");
   size_t length  = strlen (envvar) + 1;
@@ -237,12 +247,10 @@ void change_dir(char **pl){ // maybe find better name then pl?
  * when Ctrl-C is pressed
  */
 void signal_handler(int signal){
-
-  if (signal == SIGINT) {
-
-printf("Interruped %d\n", getpid());
-
+  int status;
+  if (signal == SIGINT) {} 
+  else { // got signal from a background child process 
+    wait(&status);
   }
-  
-
 }
+

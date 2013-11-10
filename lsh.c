@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -37,6 +38,7 @@ void stripwhite(char *);
 void simple_command(Command *);
 char * search_path(char *);
 void change_dir(char **);
+void signal_handler(int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -170,24 +172,23 @@ void simple_command(Command *cmd){
     exit(0);
   } else if (strcmp(*pl,"cd") == 0) {
     change_dir(pl);
-  } else {
-    
-    
+  } else {   
     int pid = fork();
-    int status;
-    
+    int status;  
     if (pid == 0) {// child process
       char *prg = search_path(*pl); // free this?
       if (prg == NULL) {
 	printf("%s: command not found \n", *pl);
-      } else execvp(prg, pl);
+      } else {
+	execvp(prg, pl);
+      }
     }
     else if (pid > 0){ 
+      signal(SIGINT, signal_handler);
       wait(&status);
     } else 
       printf("Failed to fork!!");
   }
-  
 }
 
 
@@ -221,6 +222,7 @@ char * search_path(char *executable){
 
 }
 
+
 /*
  * Implements the cd command of our shell
  */
@@ -229,3 +231,18 @@ void change_dir(char **pl){ // maybe find better name then pl?
   chdir(*pl);
 }
 
+
+/*
+ * Handles the interruption signal of SIGINT
+ * when Ctrl-C is pressed
+ */
+void signal_handler(int signal){
+
+  if (signal == SIGINT) {
+
+printf("Interruped %d\n", getpid());
+
+  }
+  
+
+}

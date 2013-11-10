@@ -159,6 +159,7 @@ stripwhite (char *string)
 
 /*
   Runs a simple command
+  Maybe should return child exit stat
  */
 void simple_command(Command *cmd){
   Pgm *p = cmd->pgm;
@@ -168,15 +169,15 @@ void simple_command(Command *cmd){
   int status;
 
   if (pid == 0) {// child process
-    printf("CHILD");
     char *prg = search_path(*pl); // free this?
-    execl(prg, *pl,NULL);
+    if (prg == NULL) {
+      printf("%s: command not found \n", *pl);
+    } else execvp(prg, pl);
   }
   else if (pid > 0){ 
     wait(&status);
   } else 
     printf("Failed to fork!!");
-
 }
 
 
@@ -185,7 +186,7 @@ char * search_path(char *executable){
   size_t length  = strlen (envvar) + 1;
   char * pathvar = malloc (length); // allocate memory for array
   strcpy (pathvar, envvar); 
-  char *path_tokens =  strtok(pathvar, ":");
+  char *path_tokens = strtok(pathvar, ":");
   
   while(path_tokens != NULL) {
 

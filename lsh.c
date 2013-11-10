@@ -36,6 +36,7 @@ void PrintPgm(Pgm *);
 void stripwhite(char *);
 void simple_command(Command *);
 char * search_path(char *);
+void change_dir(char **);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -165,19 +166,28 @@ void simple_command(Command *cmd){
   Pgm *p = cmd->pgm;
   char **pl = p->pgmlist;
   
-  int pid = fork();
-  int status;
-
-  if (pid == 0) {// child process
-    char *prg = search_path(*pl); // free this?
-    if (prg == NULL) {
-      printf("%s: command not found \n", *pl);
-    } else execvp(prg, pl);
+  if (strcmp(*pl,"exit") == 0) {  // change to switch?
+    exit(0);
+  } else if (strcmp(*pl,"cd") == 0) {
+    change_dir(pl);
+  } else {
+    
+    
+    int pid = fork();
+    int status;
+    
+    if (pid == 0) {// child process
+      char *prg = search_path(*pl); // free this?
+      if (prg == NULL) {
+	printf("%s: command not found \n", *pl);
+      } else execvp(prg, pl);
+    }
+    else if (pid > 0){ 
+      wait(&status);
+    } else 
+      printf("Failed to fork!!");
   }
-  else if (pid > 0){ 
-    wait(&status);
-  } else 
-    printf("Failed to fork!!");
+  
 }
 
 
@@ -211,4 +221,22 @@ char * search_path(char *executable){
 
 }
 
+/*
+ * Implements the cd command of our shell
+ */
+void change_dir(char **pl){ // maybe find better name then pl?
+
+ 
+  *pl++;
+  chdir(*pl);
+
+  /* while (*pl) { */
+  /*   printf("%s ", *pl++); */
+  /* } */
+
+
+
+
+
+}
 

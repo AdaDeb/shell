@@ -225,18 +225,7 @@ char * search_path(char *executable){
  * Implements the cd command of our shell
  */
 void change_dir(char **pl){ // maybe find better name then pl?
-
- 
   *pl++;
   chdir(*pl);
-
-  /* while (*pl) { */
-  /*   printf("%s ", *pl++); */
-  /* } */
-
-
-
-
-
 }
 

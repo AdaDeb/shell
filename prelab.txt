@@ -1,0 +1,89 @@
+------------- QUESTION 1 --------------------
+-g tells the gcc compiler to produce debug information of the program we are compiling.
+-Wall tells gcc to warn about any warnings it finds, it results in an exhaustive list
+of warnings.
+
+
+
+------------- QUESTION 2 --------------------
+fork - used to spwan a new process, no argument are required (void).
+The head file to include is unistd.h, 0 is returned to the child process and the PID
+of the new process is returned to the parent process.
+
+clone - often used to spawn a new thread which can share the 
+parent's memory space. It takes a a function fn that is executed when the process is 
+spawned, it takes a child_stack which is the execution stack of the child process. It also
+takes a flags argument to indicate what is to be shared with the parent process. The sched.h 
+header file needs to be included. clone returns the PID of the spwaned process to the caller or 
+-1 in case of failure.
+
+creat - allows opening of a new file or the overwriting of an existing one. It needs a path to the 
+file to be opened as an argument as well as a mode that indicates what kind of modes should be used
+like writable and/or readable modes. sys/stat.h and fcntl.h need to be included. A file descriptor is
+returned or -1 in case of failure.
+
+open - similar to creat, it allows opening a new file. It takes a pathname to the file and optionally 
+a flags int that denotes what flags are used and modes argument just like creat. sys/stat.h, sys/types.h
+and tcntl.h need to be included. It also returns a file descriptor or -1 if it failed. 
+
+close - is used to close a file description, it takes a file descriptor fd as an argument. It returns 0
+if succesful, otherwise -1. unistd.h needs to be included. 
+
+wait - suspends a calling process until the child one returns. It takes a status integer used to store 
+the status of the child process that terminated. It needs sys/types.h and sys/wait.h. It returns the PID of the
+child process that terminated if sucessful , otherwise -1.
+
+stat - returns information about a specific file on the disk. It needs sys/types.h, sys/stat.h and unistd.h to be
+included. It takes a path to the file concerned and a stat struct that will hold the information. The function 
+returns 0 upon success or -1 if it fails.
+
+signal - allows the handling of signals. It takes a signal that we are interested in as a first
+argument and a handler function as a second argument. It returns the value of the handler function in 
+case of success, otherwise SIG_ERR. signal.h is the needed header file.
+
+pipe - is used to create a unidirectional pipe. It takes an array for two file descriptors as argument.
+It returns 0 if successful otherwise -1. unistd.h needs to be included.
+
+dup - used to duplicate an existing file descriptor. It takes the file descriptor to duplicate as an
+argument. It returns the new file descriptor if successful or -1 if it failed. unistd.h needs to be included.
+
+exit - causes the calling process to terminate. It takes a status integer as argument. It has no return value
+and unistd.h needs to be included.
+
+execvp - allows the execution of a specific file. It takes a file as first argument and an array of arguments 
+as a second argument. The file unistd.h needs to be included. It returns -1 if it fails.
+
+chdir - changes the current working directory. It takes a path as an argument. unistd.h needs to be included. 
+0 is returned if it succeeds, otherwise -1.
+
+------------- QUESTION 3 --------------------
+Any code after point 1 (pid == 1) will be executed by the child process spawned by fork().
+
+------------- QUESTION 4 --------------------
+In point 1, we are handling the Ctrl-C combination which suspends the process. In point 2, we are handling 
+Ctrl-Z which terminates a process. In the snippet code we have, only SIGINT(Ctrl-C) signal is handled. In order to handle
+both signals we need to add the following line in the main method: signal(SIGTSTP, sigtest);
+
+------------- QUESTION 5 --------------------
+The parent and child processes communicate via a unidriectinal pipe. The child process writes to the pipe but does
+not read from it so it closes p[0] which is the file descriptor for reading from the pipe. The parent process only reads 
+from the pipe but does not write so it closes the writing descriptor p[1].
+
+------------- QUESTION 6 --------------------
+ps aux shows all the processes in the system for all users. The output of ps aux is piped into grep which searches for 
+"defunct". The output will not be empty as long as there is a zombie process in the system.
+
+------------- QUESTION 7 --------------------
+This command list all processes owned by root. The result is then piped to wc which counts the number of lines.
+A zombie process is a process whose parent has not yet checked its exit status. One way to remove it is to kill the parent 
+process with "kill -9 PPID". The concept behind this command is that the init process will become the parent process
+of the zombie process, and init will periodically call wait() which will read the exit status of the zombie process which
+results in its removal from the process table. This can be used when a parent process for some reasons failed to call 
+wait().
+
+------------- QUESTION 8 --------------------
+ulimit allows setting limits for the resources used by the system. To limit the number of zombie processes created 
+we can call ulimit -u LIMIT_NUMBER. An easier way could be to write a script that looks for zombie processes and their parents
+and kills them (by checking a process's tree). Another technique is to use SIGCHLD signal which can be intercepted by the parent process so that a child 
+process terminates instead of remaining a zombie. The ulimit can be extended to other resources such as managing file locks, stack memory size and size of 
+virtual memory.

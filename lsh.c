@@ -191,20 +191,25 @@ void run_command(Command *cmd){
     pCounter = 0;	   
   } else {
 
-  if (strcmp(*pl,"exit") == 0) {  // change to switch?
-    exit(0); // needs to be tested more
-  } else if (strcmp(*pl,"cd") == 0) {
-    change_dir(pl);
-  } else {   
-    int pid = fork();
+    if (strcmp(*pl,"exit") == 0)
+      exit(0); // needs to be tested more
+ 
+
+    if (strcmp(*pl,"cd") == 0) {
+      change_dir(pl);
+      return;
+    }
+    
     int status;  
-    if (pid == 0) {// child process
-      char *prg = search_path(*pl); // free this?
-      if (prg == NULL) {
+    char *prg = search_path(*pl); // free this?
+    if (prg == NULL) {
 	printf("%s: command not found \n", *pl);
-      } else {
-	execvp(prg, pl);
-      }
+	return;
+    }
+    
+    int pid = fork();
+    if (pid == 0) {// child process
+      execvp(prg, pl);	
     }
     else if (pid > 0){ 
       signal(SIGINT, signal_handler);
@@ -212,12 +217,10 @@ void run_command(Command *cmd){
 	signal(SIGCHLD, signal_handler);
       else 
 	wait(&status);
-    } else 
-      printf("Failed to fork!!");
-  }
+    } 
+  }  
+} // end pipe if
 
-  } // end pipe if
-}
 
 
 /*

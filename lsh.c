@@ -16,7 +16,7 @@
  * All the best 
  */
 
-
+#include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <signal.h>
@@ -40,10 +40,17 @@ char * search_path(char *);
 void change_dir(char **);
 void signal_handler(int);
 int is_background(char **);
-
+void handle_pipe(Pgm *, int *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+int firstRun = 1;
+int pCounter = 0;
+int pipeNumbers;
+int pip;
+/*Pipe variables*/
+
+
 
 /*
  * Name: main
@@ -52,7 +59,7 @@ int done = 0;
  *
  */
 int main(void)
-{
+{ 
   Command cmd;
   int n;
 
@@ -164,15 +171,28 @@ stripwhite (char *string)
   Runs a simple command
   Maybe should return child exit stat
   Should have comments inside this method!!
+  * author: Adam Debbiche
  */
 void run_command(Command *cmd){
   Pgm *p = cmd->pgm;
   char **pl = p->pgmlist;
   
+  
+  // Here we should first check if the command has any pipes 
+  // if yes then handle them otherwise do what's below
 
+  if (p->next != NULL) {
+    pipeNumbers = countPipesNeeded(p);
+    pCounter = 0;
+    int pipes[pipeNumbers*2];
+    pip = 0;
+    firstRun = 1;
+    handle_pipe(p, pipes);
+    pCounter = 0;	   
+  } else {
 
   if (strcmp(*pl,"exit") == 0) {  // change to switch?
-    exit(0);
+    exit(0); // needs to be tested more
   } else if (strcmp(*pl,"cd") == 0) {
     change_dir(pl);
   } else {   
@@ -195,12 +215,15 @@ void run_command(Command *cmd){
     } else 
       printf("Failed to fork!!");
   }
+
+  } // end pipe if
 }
 
 
 /*
  * Search for the path of an executable in the
  * PATH variable and returns it
+ * author: Adam Debbiche
  */
 char * search_path(char *executable){
   char *envvar = getenv("PATH");
@@ -225,16 +248,14 @@ char * search_path(char *executable){
     }
     path_tokens = strtok(NULL, ":");
   }
-  
   free(pathvar);
-
   return NULL;
-
 }
 
 
 /*
  * Implements the cd command of our shell
+ * author: Adam Debbiche
  */
 void change_dir(char **pl){ // maybe find better name then pl?
   *pl++;
@@ -245,6 +266,7 @@ void change_dir(char **pl){ // maybe find better name then pl?
 /*
  * Handles the interruption signal of SIGINT
  * when Ctrl-C is pressed
+ * author: Adam Debbiche
  */
 void signal_handler(int signal){
   int status;
@@ -253,4 +275,75 @@ void signal_handler(int signal){
     wait(&status);
   }
 }
+
+
+int countPipesNeeded(Pgm *p){
+
+  int pipeNumbers = -1;
+  Pgm *pCopy = p;
+  while(pCopy) {
+    pipeNumbers++;
+    pCopy = pCopy -> next;
+  }
+
+  return pipeNumbers;
+
+}
+
+
+
+
+void handle_pipe(Pgm *p, int pipes[]){
+  if (p == NULL) {
+    return;
+  }
+  else {
+    pip = pip + 2;
+    int j;
+    for(j = 0; j < pip; j += 2){	
+	pipe(pipes + j);
+      }
+    handle_pipe(p -> next, pipes); 
+    int pid = fork();
+    
+    if (pid == 0){ // child process code
+      if (firstRun == 1) { // first run
+	//close(1);
+	dup2(pipes[pCounter+1], 1);	
+      }
+      else if (firstRun == 0 && pCounter < pipeNumbers+1){ // not first run, there is previous command and a next one
+	close(0);
+	close(1);
+	dup(pipes[pCounter-2]);
+	dup(pipes[pCounter+1]);
+      }
+      else if (firstRun == 0 && pCounter >= pipeNumbers+1 ){ // last command to run, there is only previous, no next one{
+	close(0);
+	dup(pipes[pCounter-2]);
+      }
+      
+      char **pl = p->pgmlist; 
+      char *bin = search_path(*pl);            
+      execvp(bin, pl);
+
+    } // end child process code
+    else { // parent code 
+      if (firstRun == 1) {
+	close(pipes[pCounter+1]);
+	firstRun = 0;
+      } 
+      else if (firstRun == 0 &&  pCounter < pipeNumbers+1) {
+	close(pipes[pCounter+1]);
+	close(pipes[pCounter-2]);
+      }
+      else if (firstRun == 0 && pCounter >= pipeNumbers+1){
+	close(pipes[pCounter-2]);	     
+      }
+      int status;
+      wait(&status);
+    } // end parent code
+    pCounter = pCounter+2;
+  } 
+}
+
 

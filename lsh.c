@@ -16,6 +16,7 @@
  * All the best 
  */
 
+#include <fcntl.h>
 #include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -41,6 +42,8 @@ void change_dir(char **);
 void signal_handler(int);
 int is_background(char **);
 void handle_pipe(Pgm *, int *);
+void handle_stdin(Command *);
+
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -48,6 +51,8 @@ int firstRun = 1;
 int pCounter = 0;
 int pipeNumbers;
 int pip;
+char *stdinstr;
+char *stdoutstr;
 /*Pipe variables*/
 
 
@@ -84,7 +89,7 @@ int main(void)
         add_history(line);
         /* execute it */
         n = parse(line, &cmd);
-        //PrintCommand(n, &cmd); // uncomment to print parser info
+	//PrintCommand(n, &cmd); // uncomment to print parser info
 	run_command(&cmd);
       }
     }
@@ -176,7 +181,8 @@ stripwhite (char *string)
 void run_command(Command *cmd){
   Pgm *p = cmd->pgm;
   char **pl = p->pgmlist;
-  
+  stdinstr = cmd->rstdin;
+  stdoutstr = cmd->rstdout;
   
   // Here we should first check if the command has any pipes 
   // if yes then handle them otherwise do what's below
@@ -209,6 +215,19 @@ void run_command(Command *cmd){
     
     int pid = fork();
     if (pid == 0) {// child process
+
+      if (cmd -> rstdin != NULL) {
+	printf("We have stdin\n");
+	FILE *fp;
+	fp = freopen (cmd ->rstdin, "r", stdin);
+       }
+      
+      if (cmd->rstdout != NULL){
+	printf("We have stdout: %s \n", cmd->rstdout);
+	int fd = open(cmd->rstdout, O_WRONLY|O_CREAT|O_TRUNC);
+	dup2(fd, 1);
+      }
+      
       execvp(prg, pl);	
     }
     else if (pid > 0){ 
@@ -219,9 +238,7 @@ void run_command(Command *cmd){
 	wait(&status);
     } 
   }  
-} // end pipe if
-
-
+} 
 
 /*
  * Search for the path of an executable in the
@@ -279,23 +296,28 @@ void signal_handler(int signal){
   }
 }
 
-
+/*
+ * Counts the number of pipes
+ * needed for a certain command
+ * author: Adam Debbiche
+ */
 int countPipesNeeded(Pgm *p){
-
   int pipeNumbers = -1;
   Pgm *pCopy = p;
   while(pCopy) {
     pipeNumbers++;
     pCopy = pCopy -> next;
   }
-
   return pipeNumbers;
-
 }
 
 
-
-
+/*
+ * Recursive function that
+ * loops through the commands and 
+ * spawns child processes for each pipe
+ * author: Adam Debbiche
+ */
 void handle_pipe(Pgm *p, int pipes[]){
   if (p == NULL) {
     return;
@@ -310,19 +332,26 @@ void handle_pipe(Pgm *p, int pipes[]){
     int pid = fork();
     
     if (pid == 0){ // child process code
-      if (firstRun == 1) { // first run
-	//close(1);
+      if (firstRun == 1) { // first run	
+	if (stdinstr != NULL) {
+	  FILE *fp = freopen (stdinstr, "r", stdin);
+	}
 	dup2(pipes[pCounter+1], 1);	
       }
       else if (firstRun == 0 && pCounter < pipeNumbers+1){ // not first run, there is previous command and a next one
-	close(0);
-	close(1);
-	dup(pipes[pCounter-2]);
-	dup(pipes[pCounter+1]);
+	if (stdinstr != NULL) {
+	  FILE *fp = freopen (stdinstr, "r", stdin);
+	}
+	dup2(pipes[pCounter-2], 0);
+	dup2(pipes[pCounter+1], 1);
       }
       else if (firstRun == 0 && pCounter >= pipeNumbers+1 ){ // last command to run, there is only previous, no next one{
-	close(0);
-	dup(pipes[pCounter-2]);
+	dup2(pipes[pCounter-2], 0);
+	if (stdoutstr != NULL){
+	  printf("We have stdout: %s \n", stdoutstr);
+	  int fd = open(stdoutstr, O_WRONLY|O_CREAT|O_TRUNC);
+	  dup2(fd, 1);
+	}
       }
       
       char **pl = p->pgmlist; 

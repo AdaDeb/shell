@@ -53,8 +53,6 @@ int pip;
 char *stdinstr;
 char *stdoutstr;
 
-
-
 /*
  * Name: main
  *
@@ -295,7 +293,7 @@ void change_dir(char **pl){ // maybe find better name then pl?
  */
 void signal_handler(int signal){
   int status;
-  if (signal == SIGINT) {return;} 
+  if (signal == SIGINT) return; 
   else { // got signal from a background child process 
     waitpid(NULL, &status,WNOHANG);
   }
@@ -334,8 +332,8 @@ void handle_pipe(Pgm *p, int pipes[]){
 	pipe(pipes + j);
       }
     handle_pipe(p -> next, pipes); 
-    int pid = fork();
     
+    int pid = fork();
     if (pid == 0){ // child process code
       if (firstRun == 1) { // first run	
 	if (stdinstr != NULL) {
@@ -343,22 +341,21 @@ void handle_pipe(Pgm *p, int pipes[]){
 	}
 	dup2(pipes[pCounter+1], 1);	
       }
-      else if (firstRun == 0 && pCounter < pipeNumbers+1){ // not first run, there is previous command and a next one
+      if (firstRun == 0 && (pCounter/pipeNumbers != 2)){ // not first run, there is previous command and a next one
 	if (stdinstr != NULL) {
 	  FILE *fp = freopen (stdinstr, "r", stdin);
 	}
 	dup2(pipes[pCounter-2], 0);
 	dup2(pipes[pCounter+1], 1);
       }
-      else if (firstRun == 0 && pCounter >= pipeNumbers+1 ){ // last command to run, there is only previous, no next one{
-	dup2(pipes[pCounter-2], 0);
+      if (firstRun == 0 && (pCounter/pipeNumbers == 2)){ // last command to run, there is only previous, no next one{
+	dup2(pipes[pCounter-2], 0);	
 	if (stdoutstr != NULL){
-	  printf("We have stdout: %s \n", stdoutstr);
-	  int fd = open(stdoutstr, O_WRONLY|O_CREAT|O_TRUNC);
+	  mode_t mode =  S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR;
+	  int fd = creat(stdoutstr,mode);
 	  dup2(fd, 1);
 	}
       }
-      
       char **pl = p->pgmlist; 
       char *bin = search_path(*pl);            
       execvp(bin, pl);
@@ -374,7 +371,8 @@ void handle_pipe(Pgm *p, int pipes[]){
 	close(pipes[pCounter-2]);
       }
       else if (firstRun == 0 && pCounter >= pipeNumbers+1){
-	close(pipes[pCounter-2]);	     
+	close(pipes[pCounter-2]);
+	close(pipes[pCounter+1]);
       }
       int status;
       wait(&status);

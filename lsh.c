@@ -42,7 +42,6 @@ void change_dir(char **);
 void signal_handler(int);
 int is_background(char **);
 void handle_pipe(Pgm *, int *);
-void handle_stdin(Command *);
 
 
 /* When non-zero, this global means the user is done using this program. */
@@ -53,7 +52,6 @@ int pipeNumbers;
 int pip;
 char *stdinstr;
 char *stdoutstr;
-/*Pipe variables*/
 
 
 
@@ -183,7 +181,14 @@ void run_command(Command *cmd){
   char **pl = p->pgmlist;
   stdinstr = cmd->rstdin;
   stdoutstr = cmd->rstdout;
+  sigset_t mask, omask;
+
+  signal(SIGINT, signal_handler);
+  if (cmd -> bakground == 1) 
+    signal(SIGCHLD, signal_handler);
   
+  
+ 
   // Here we should first check if the command has any pipes 
   // if yes then handle them otherwise do what's below
 
@@ -215,26 +220,26 @@ void run_command(Command *cmd){
     
     int pid = fork();
     if (pid == 0) {// child process
+      if(cmd->bakground)
+        signal(SIGINT, SIG_IGN);
+      else
+	signal(SIGINT, SIG_DFL);
 
       if (cmd -> rstdin != NULL) {
-	printf("We have stdin\n");
 	FILE *fp;
 	fp = freopen (cmd ->rstdin, "r", stdin);
        }
       
       if (cmd->rstdout != NULL){
-	printf("We have stdout: %s \n", cmd->rstdout);
-	int fd = open(cmd->rstdout, O_WRONLY|O_CREAT|O_TRUNC);
+        mode_t mode =  S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR;
+	int fd = creat(cmd->rstdout,mode);
 	dup2(fd, 1);
+        close(fd);
       }
-      
       execvp(prg, pl);	
     }
     else if (pid > 0){ 
-      signal(SIGINT, signal_handler);
-      if (cmd -> bakground == 1) 
-	signal(SIGCHLD, signal_handler);
-      else 
+      if (cmd -> bakground == 0) 
 	wait(&status);
     } 
   }  
@@ -290,9 +295,9 @@ void change_dir(char **pl){ // maybe find better name then pl?
  */
 void signal_handler(int signal){
   int status;
-  if (signal == SIGINT) {} 
+  if (signal == SIGINT) {return;} 
   else { // got signal from a background child process 
-    wait(&status);
+    waitpid(NULL, &status,WNOHANG);
   }
 }
 

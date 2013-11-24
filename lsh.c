@@ -46,12 +46,12 @@ void handle_pipe(Pgm *, int *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
-int firstRun = 1;
-int pCounter = 0;
-int pipeNumbers;
-int pip;
-char *stdinstr;
-char *stdoutstr;
+int firstRun = 1; // boolean for checking if we are running the first cmd of a pipe
+int pCounter = 0; // pipe counter
+int pipeNumbers; // numbers of pipes we need
+int pip; // keeps count of pipes created
+char *stdinstr; // copy of stdin of cmd
+char *stdoutstr; // copy of stdout of cmd
 
 /*
  * Name: main
@@ -86,7 +86,7 @@ int main(void)
         /* execute it */
         n = parse(line, &cmd);
 	//PrintCommand(n, &cmd); // uncomment to print parser info
-	run_command(&cmd);
+	run_command(&cmd); // runs the command entered
       }
     }
     
@@ -169,10 +169,9 @@ stripwhite (char *string)
 
 
 /*
-  Runs a simple command
-  Maybe should return child exit stat
-  Should have comments inside this method!!
-  * author: Adam Debbiche
+ * Runs a command the user entered 
+ * on the terminal
+ * author: Adam Debbiche
  */
 void run_command(Command *cmd){
   Pgm *p = cmd->pgm;
@@ -181,61 +180,68 @@ void run_command(Command *cmd){
   stdoutstr = cmd->rstdout;
   sigset_t mask, omask;
 
+  // register signals 
   signal(SIGINT, signal_handler);
   if (cmd -> bakground == 1) 
     signal(SIGCHLD, signal_handler);
   
   
  
-  // Here we should first check if the command has any pipes 
-  // if yes then handle them otherwise do what's below
-
+  // Here we first check if the command has any pipes 
+  // if yes then handle them
   if (p->next != NULL) {
     pipeNumbers = countPipesNeeded(p);
     pCounter = 0;
-    int pipes[pipeNumbers*2];
     pip = 0;
     firstRun = 1;
+    int pipes[pipeNumbers*2];
     handle_pipe(p, pipes);
-    pCounter = 0;	   
   } else {
-
+   
+    // quit if user enters "exit"
     if (strcmp(*pl,"exit") == 0)
-      exit(0); // needs to be tested more
- 
+      exit(0);
 
+    // change dir if user enter "cd"
     if (strcmp(*pl,"cd") == 0) {
       change_dir(pl);
       return;
     }
     
     int status;  
-    char *prg = search_path(*pl); // free this?
+    char *prg = search_path(*pl); // search for cmd bin
     if (prg == NULL) {
 	printf("%s: command not found \n", *pl);
 	return;
     }
     
-    int pid = fork();
-    if (pid == 0) {// child process
+    // fork a child process to run cmd
+    int pid = fork(); 
+    // child process
+    if (pid == 0) {
       if(cmd->bakground)
         signal(SIGINT, SIG_IGN);
       else
 	signal(SIGINT, SIG_DFL);
-
+      
+      // check if we have stdin
       if (cmd -> rstdin != NULL) {
 	FILE *fp;
+	// redirect stdin
 	fp = freopen (cmd ->rstdin, "r", stdin);
        }
       
+      // redirect stdout if we have one
       if (cmd->rstdout != NULL){
         mode_t mode =  S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR;
 	int fd = creat(cmd->rstdout,mode);
 	dup2(fd, 1);
         close(fd);
       }
-      execvp(prg, pl);	
+      execvp(prg, pl); // run command
     }
+    
+    // parent code, just waiting for child
     else if (pid > 0){ 
       if (cmd -> bakground == 0) 
 	wait(&status);
@@ -249,21 +255,19 @@ void run_command(Command *cmd){
  * author: Adam Debbiche
  */
 char * search_path(char *executable){
-  char *envvar = getenv("PATH");
-  size_t length  = strlen (envvar) + 1;
+  char *envvar = getenv("PATH"); // get PATH variable
+  size_t length  = strlen (envvar)+1;
   char * pathvar = malloc (length); // allocate memory for array
   strcpy (pathvar, envvar); 
   char *path_tokens = strtok(pathvar, ":");
   
   while(path_tokens != NULL) {
-
     struct stat info;
-
+    // allocate mem for concatenated string
     char *fullpath = malloc(strlen(path_tokens)+
-			    strlen(executable)+1); // allocate mem for concatenated string
-    
+			    strlen(executable)+1);
     strcpy(fullpath, path_tokens);
-    strcat(fullpath, "/");
+    strcat(fullpath, "/"); // we need to add a /
     strcat(fullpath, executable);
 
     if (stat(fullpath, &info) == 0){ // fails if file doesn't exist 
@@ -272,19 +276,18 @@ char * search_path(char *executable){
     path_tokens = strtok(NULL, ":");
   }
   free(pathvar);
-  return NULL;
+  return NULL; // command not found!
 }
-
 
 /*
  * Implements the cd command of our shell
  * author: Adam Debbiche
  */
-void change_dir(char **pl){ // maybe find better name then pl?
+void change_dir(char **pl){
   *pl++;
+  // change directory
   chdir(*pl);
 }
-
 
 /*
  * Handles the interruption signal of SIGINT
@@ -322,62 +325,79 @@ int countPipesNeeded(Pgm *p){
  * author: Adam Debbiche
  */
 void handle_pipe(Pgm *p, int pipes[]){
+  // base case
   if (p == NULL) {
-    return;
+    return; 
   }
   else {
     pip = pip + 2;
     int j;
+    // create the pipes needed
     for(j = 0; j < pip; j += 2){	
 	pipe(pipes + j);
       }
     handle_pipe(p -> next, pipes); 
     
     int pid = fork();
-    if (pid == 0){ // child process code
-      if (firstRun == 1) { // first run	
+    // child code
+    if (pid == 0){
+      
+      // first run (running first command)
+      if (firstRun == 1) {
+	// redirect stdin if needed
 	if (stdinstr != NULL) {
 	  FILE *fp = freopen (stdinstr, "r", stdin);
 	}
 	dup2(pipes[pCounter+1], 1);	
       }
-      if (firstRun == 0 && (pCounter/pipeNumbers != 2)){ // not first run, there is previous command and a next one
+      
+      // not first run, there is previous command and a next one
+      if (firstRun == 0 && (pCounter/pipeNumbers != 2)){ 
+	// redirect stdin if needed
 	if (stdinstr != NULL) {
 	  FILE *fp = freopen (stdinstr, "r", stdin);
 	}
-	dup2(pipes[pCounter-2], 0);
-	dup2(pipes[pCounter+1], 1);
+	dup2(pipes[pCounter-2], 0); // redirect input
+	dup2(pipes[pCounter+1], 1); // redirect output
       }
-      if (firstRun == 0 && (pCounter/pipeNumbers == 2)){ // last command to run, there is only previous, no next one{
-	dup2(pipes[pCounter-2], 0);	
+
+      // last command to run, there is only previous, no next one
+      if (firstRun == 0 && (pCounter/pipeNumbers == 2)){ 
+	dup2(pipes[pCounter-2], 0);
+	// redirect stdout if needed
 	if (stdoutstr != NULL){
 	  mode_t mode =  S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR;
 	  int fd = creat(stdoutstr,mode);
 	  dup2(fd, 1);
 	}
       }
+      // search for binary then execute it
       char **pl = p->pgmlist; 
       char *bin = search_path(*pl);            
       execvp(bin, pl);
 
     } // end child process code
-    else { // parent code 
+    // parent code, just closing its end of pipes then waiting
+    else {
+      // first command
       if (firstRun == 1) {
 	close(pipes[pCounter+1]);
 	firstRun = 0;
       } 
+      // running command with a previous one and a next one
       else if (firstRun == 0 &&  pCounter < pipeNumbers+1) {
 	close(pipes[pCounter+1]);
 	close(pipes[pCounter-2]);
       }
+      // last command 
       else if (firstRun == 0 && pCounter >= pipeNumbers+1){
 	close(pipes[pCounter-2]);
 	close(pipes[pCounter+1]);
       }
       int status;
-      wait(&status);
+      wait(&status); // wait for child
     } // end parent code
-    pCounter = pCounter+2;
+    pCounter = pCounter+2; // increase the pipe counter
   } 
 }
 
